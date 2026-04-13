@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bittensor Substrate Staking</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;color:#111;background:#f5f5f3;padding:1.5rem;max-width:600px;margin:0 auto}
+h1{font-size:18px;font-weight:500;margin-bottom:1.25rem}
+.card{background:#fff;border:0.5px solid #ddd;border-radius:12px;padding:1.25rem;margin-bottom:1rem}
+.section-title{font-size:12px;font-weight:500;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.75rem}
+input,select{width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:8px;background:#fafafa;color:#111;font-size:14px;font-family:inherit}
+input:focus,select:focus{outline:none;border-color:#888}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.field{margin-bottom:10px}
+label{font-size:13px;color:#666;display:block;margin-bottom:4px}
+button{width:100%;padding:10px;border:0.5px solid #ccc;border-radius:8px;background:transparent;color:#111;font-size:14px;font-family:inherit;cursor:pointer;transition:background .15s}
+button:hover{background:#f0f0ee}
+button:active{transform:scale(.98)}
+.btn-connect{border-color:#185FA5;color:#185FA5}
+.btn-add{border-color:#3B6D11;color:#3B6D11}
+.btn-remove{border-color:#A32D2D;color:#A32D2D}
+.btn-full{border-color:#854F0B;color:#854F0B}
+.status{font-size:13px;padding:8px 12px;border-radius:8px;margin-top:10px;display:none;word-break:break-all}
+.status.ok{background:#EAF3DE;color:#3B6D11}
+.status.err{background:#FCEBEB;color:#A32D2D}
+.status.info{background:#E6F1FB;color:#185FA5}
+.account-box{background:#f5f5f3;border-radius:8px;padding:8px 10px;font-size:13px;color:#666;margin-bottom:10px;word-break:break-all;display:none}
+
+@media(prefers-color-scheme:dark){
+  body{background:#1a1a18;color:#eee}
+  .card{background:#242422;border-color:#333}
+  input,select{background:#1a1a18;border-color:#444;color:#eee}
+  button{color:#eee;border-color:#444}
+  button:hover{background:#2e2e2c}
+  .account-box{background:#2e2e2c;color:#aaa}
+  .status.ok{background:#173404;color:#97C459}
+  .status.err{background:#501313;color:#F09595}
+  .status.info{background:#042C53;color:#85B7EB}
+}
+</style>
+</head>
+<body>
+
+<h1>Bittensor Staking — Substrate</h1>
+
+<div class="card">
+  <div class="section-title">Połączenie</div>
+  <div class="field">
+    <label>RPC endpoint</label>
+    <select id="rpc-select" onchange="document.getElementById('rpc-custom').style.display=this.value==='custom'?'block':'none'">
+      <option value="wss://entrypoint-finney.opentensor.ai:443">Finney mainnet</option>
+      <option value="wss://test.finney.opentensor.ai:443">Finney testnet</option>
+      <option value="custom">Własny...</option>
+    </select>
+    <input id="rpc-custom" placeholder="wss://..." style="display:none;margin-top:6px">
+  </div>
+  <button class="btn-connect" onclick="connectWallet()">Połącz Bittensor Wallet</button>
+  <div id="account-box" class="account-box"></div>
+  <div id="status-conn" class="status"></div>
+</div>
+
+<div class="card">
+  <div class="section-title">Parametry</div>
+  <div class="field">
+    <label>Hotkey (SS58 adres walidatora)</label>
+    <input id="hotkey" placeholder="5G...">
+  </div>
+  <div class="row">
+    <div>
+      <label>NetUID</label>
+      <input id="netuid" type="number" value="0" min="0">
+    </div>
+    <div>
+      <label>Amount (TAO)</label>
+      <input id="amount" type="number" placeholder="0.1" step="0.0001">
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-title">Add Stake</div>
+  <button class="btn-add" onclick="doStake()">Add Stake</button>
+  <div id="status-add" class="status"></div>
+</div>
+
+<div class="card">
+  <div class="section-title">Remove Stake</div>
+  <button class="btn-remove" onclick="doRemoveStake()">Remove Stake (amount z pola wyżej)</button>
+  <div style="margin-top:8px">
+    <button class="btn-full" onclick="doRemoveStakeFull()">Remove Stake FULL (cały stake)</button>
+  </div>
+  <div id="status-remove" class="status"></div>
+</div>
+
+<div class="card">
+  <div class="section-title">Multikonto — wyślij ze wszystkich</div>
+  <div id="accounts-list" style="font-size:13px;color:#888;margin-bottom:10px">Najpierw połącz wallet.</div>
+  <button onclick="doMultiStake()" style="margin-bottom:8px">Add Stake ze wszystkich zaznaczonych</button>
+  <div style="margin-top:8px"><button class="btn-full" onclick="doMultiRemoveFull()">Remove Stake FULL ze wszystkich zaznaczonych</button></div>
+  <div id="status-multi" class="status"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@polkadot/api@10.11.2/bundle-polkadot-api.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@polkadot/extension-dapp@0.46.5/bundle-polkadot-extension-dapp.js"></script>
+<script>
+const {ApiPromise, WsProvider} = polkadotApi;
+const {web3Enable, web3Accounts, web3FromAddress} = polkadotExtensionDapp;
+
+let api = null;
+let accounts = [];
+let selectedAccount = null;
+
+function showStatus(id, msg, type) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'status ' + type;
+  el.style.display = 'block';
+}
+
+function getRpc() {
+  const sel = document.getElementById('rpc-select').value;
+  return sel === 'custom' ? document.getElementById('rpc-custom').value.trim() : sel;
+}
+
+async function connectWallet() {
+  showStatus('status-conn', 'Łączenie z siecią...', 'info');
+  try {
+    const provider = new WsProvider(getRpc());
+    api = await ApiPromise.create({provider});
+    showStatus('status-conn', 'Sieć OK. Łączenie z walletem...', 'info');
+
+    const exts = await web3Enable('Bittensor Staking Panel');
+    if (!exts.length) {
+      showStatus('status-conn', 'Nie znaleziono Bittensor Wallet extension — zainstaluj i odblokuj.', 'err');
+      return;
+    }
+    accounts = await web3Accounts();
+    if (!accounts.length) {
+      showStatus('status-conn', 'Brak kont w wallecie — dodaj konto.', 'err');
+      return;
+    }
+
+    selectedAccount = accounts[0].address;
+    const box = document.getElementById('account-box');
+    box.style.display = 'block';
+    box.innerHTML = '<strong>Aktywne konto:</strong><br>' + selectedAccount;
+
+    document.getElementById('accounts-list').innerHTML = accounts.map((a, i) => `
+      <label style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:0.5px solid #eee;cursor:pointer">
+        <input type="checkbox" data-addr="${a.address}" ${i === 0 ? 'checked' : ''} style="width:auto;margin-top:2px">
+        <span style="word-break:break-all;font-size:13px">
+          <strong>${a.meta.name || 'konto'}</strong><br>
+          <span style="color:#888">${a.address}</span>
+        </span>
+      </label>
+    `).join('');
+
+    showStatus('status-conn', 'Połączono! Kont: ' + accounts.length, 'ok');
+  } catch(e) {
+    showStatus('status-conn', 'Błąd: ' + e.message, 'err');
+  }
+}
+
+function getParams() {
+  return {
+    hotkey: document.getElementById('hotkey').value.trim(),
+    netuid: parseInt(document.getElementById('netuid').value),
+    amount: parseFloat(document.getElementById('amount').value)
+  };
+}
+
+async function signAndSend(extrinsic, address, statusId) {
+  const injector = await web3FromAddress(address);
+  return new Promise((res, rej) => {
+    extrinsic.signAndSend(address, {signer: injector.signer}, (result) => {
+      const {status, dispatchError} = result;
+      if (status.isInBlock) {
+        if (dispatchError) {
+          let msg = dispatchError.type;
+          if (dispatchError.isModule) {
+            try {
+              const dec = api.registry.findMetaError(dispatchError.asModule);
+              msg = dec.section + '.' + dec.name + ': ' + dec.docs.join(' ');
+            } catch(e) {}
+          }
+          rej(new Error(msg));
+        } else {
+          showStatus(statusId, 'TX w bloku: ' + status.asInBlock, 'ok');
+          res(status.asInBlock.toString());
+        }
+      }
+    });
+  });
+}
+
+async function doStake() {
+  if (!api) { showStatus('status-add', 'Najpierw połącz wallet.', 'err'); return; }
+  const {hotkey, netuid, amount} = getParams();
+  if (!hotkey || isNaN(amount)) { showStatus('status-add', 'Uzupełnij hotkey i amount.', 'err'); return; }
+  const rao = BigInt(Math.round(amount * 1e9));
+  showStatus('status-add', 'Podpisz TX w wallecie...', 'info');
+  try {
+    const tx = api.tx.subtensorModule.addStake(hotkey, netuid, rao);
+    await signAndSend(tx, selectedAccount, 'status-add');
+  } catch(e) {
+    showStatus('status-add', 'Błąd: ' + e.message, 'err');
+  }
+}
+
+async function doRemoveStake() {
+  if (!api) { showStatus('status-remove', 'Najpierw połącz wallet.', 'err'); return; }
+  const {hotkey, netuid, amount} = getParams();
+  if (!hotkey || isNaN(amount)) { showStatus('status-remove', 'Uzupełnij hotkey i amount.', 'err'); return; }
+  const rao = BigInt(Math.round(amount * 1e9));
+  showStatus('status-remove', 'Podpisz TX w wallecie...', 'info');
+  try {
+    const tx = api.tx.subtensorModule.removeStake(hotkey, netuid, rao);
+    await signAndSend(tx, selectedAccount, 'status-remove');
+  } catch(e) {
+    showStatus('status-remove', 'Błąd: ' + e.message, 'err');
+  }
+}
+
+async function doRemoveStakeFull() {
+  if (!api) { showStatus('status-remove', 'Najpierw połącz wallet.', 'err'); return; }
+  const {hotkey, netuid} = getParams();
+  if (!hotkey) { showStatus('status-remove', 'Uzupełnij hotkey.', 'err'); return; }
+  showStatus('status-remove', 'Pobieranie salda stake...', 'info');
+  try {
+    const stakeInfo = await api.query.subtensorModule.stake(hotkey, selectedAccount);
+    const stakeAmount = stakeInfo ? stakeInfo.toBigInt() : 0n;
+    if (stakeAmount === 0n) { showStatus('status-remove', 'Brak stake do zdjęcia.', 'err'); return; }
+    const tx = api.tx.subtensorModule.removeStake(hotkey, netuid, stakeAmount);
+    showStatus('status-remove', 'Podpisz TX w wallecie...', 'info');
+    await signAndSend(tx, selectedAccount, 'status-remove');
+  } catch(e) {
+    showStatus('status-remove', 'Błąd: ' + e.message, 'err');
+  }
+}
+
+async function doMultiRemoveFull() {
+  if (!api) { showStatus('status-multi', 'Najpierw połącz wallet.', 'err'); return; }
+  const {hotkey, netuid} = getParams();
+  if (!hotkey) { showStatus('status-multi', 'Uzupełnij hotkey.', 'err'); return; }
+  const checked = [...document.querySelectorAll('#accounts-list input[type=checkbox]:checked')].map(c => c.dataset.addr);
+  if (!checked.length) { showStatus('status-multi', 'Zaznacz przynajmniej jedno konto.', 'err'); return; }
+  showStatus('status-multi', 'Pobieram salda i wysyłam TX z ' + checked.length + ' kont...', 'info');
+  let ok = 0, fail = 0;
+  for (const addr of checked) {
+    try {
+      const stakeInfo = await api.query.subtensorModule.stake(hotkey, addr);
+      const stakeAmount = stakeInfo ? stakeInfo.toBigInt() : 0n;
+      if (stakeAmount === 0n) {
+        showStatus('status-multi', addr.slice(0,10) + '... brak stake, pomijam.', 'info');
+        continue;
+      }
+      const tx = api.tx.subtensorModule.removeStake(hotkey, netuid, stakeAmount);
+      await signAndSend(tx, addr, 'status-multi');
+      ok++;
+    } catch(e) {
+      fail++;
+      showStatus('status-multi', addr.slice(0,10) + '... błąd: ' + e.message, 'err');
+    }
+  }
+  showStatus('status-multi', 'Gotowe: ' + ok + ' OK, ' + fail + ' błędów', ok > 0 ? 'ok' : 'err');
+}
+
+async function doMultiStake() {
+  if (!api) { showStatus('status-multi', 'Najpierw połącz wallet.', 'err'); return; }
+  const {hotkey, netuid, amount} = getParams();
+  if (!hotkey || isNaN(amount)) { showStatus('status-multi', 'Uzupełnij hotkey i amount.', 'err'); return; }
+  const rao = BigInt(Math.round(amount * 1e9));
+  const checked = [...document.querySelectorAll('#accounts-list input[type=checkbox]:checked')].map(c => c.dataset.addr);
+  if (!checked.length) { showStatus('status-multi', 'Zaznacz przynajmniej jedno konto.', 'err'); return; }
+  showStatus('status-multi', 'Wysyłam TX z ' + checked.length + ' kont... (podpisuj kolejno w wallecie)', 'info');
+  let ok = 0, fail = 0;
+  for (const addr of checked) {
+    try {
+      const tx = api.tx.subtensorModule.addStake(hotkey, netuid, rao);
+      await signAndSend(tx, addr, 'status-multi');
+      ok++;
+    } catch(e) {
+      fail++;
+      showStatus('status-multi', addr.slice(0,10) + '... błąd: ' + e.message, 'err');
+    }
+  }
+  showStatus('status-multi', 'Gotowe: ' + ok + ' OK, ' + fail + ' błędów', ok > 0 ? 'ok' : 'err');
+}
+</script>
+</body>
+</html>
