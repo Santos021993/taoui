@@ -102,11 +102,14 @@ button:active{transform:scale(.98)}
   <div id="status-multi" class="status"></div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@polkadot/api@10.11.2/bundle-polkadot-api.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@polkadot/extension-dapp@0.46.5/bundle-polkadot-extension-dapp.js"></script>
+<script src="https://unpkg.com/@polkadot/api@10.11.2/bundle-polkadot-api.js"></script>
+<script src="https://unpkg.com/@polkadot/extension-dapp@0.46.5/bundle-polkadot-extension-dapp.js"></script>
 <script>
-const {ApiPromise, WsProvider} = polkadotApi;
-const {web3Enable, web3Accounts, web3FromAddress} = polkadotExtensionDapp;
+const ApiPromise = polkadotApi?.ApiPromise || window?.ApiPromise;
+const WsProvider = polkadotApi?.WsProvider || window?.WsProvider;
+const web3Enable = polkadotExtensionDapp?.web3Enable || window?.web3Enable;
+const web3Accounts = polkadotExtensionDapp?.web3Accounts || window?.web3Accounts;
+const web3FromAddress = polkadotExtensionDapp?.web3FromAddress || window?.web3FromAddress;
 
 let api = null;
 let accounts = [];
