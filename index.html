@@ -102,14 +102,29 @@ button:active{transform:scale(.98)}
   <div id="status-multi" class="status"></div>
 </div>
 
-<script src="https://unpkg.com/@polkadot/api@10.11.2/bundle-polkadot-api.js"></script>
-<script src="https://unpkg.com/@polkadot/extension-dapp@0.46.5/bundle-polkadot-extension-dapp.js"></script>
 <script>
-const ApiPromise = polkadotApi?.ApiPromise || window?.ApiPromise;
-const WsProvider = polkadotApi?.WsProvider || window?.WsProvider;
-const web3Enable = polkadotExtensionDapp?.web3Enable || window?.web3Enable;
-const web3Accounts = polkadotExtensionDapp?.web3Accounts || window?.web3Accounts;
-const web3FromAddress = polkadotExtensionDapp?.web3FromAddress || window?.web3FromAddress;
+async function loadScript(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = res;
+    s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
+
+let ApiPromise, WsProvider, web3Enable, web3Accounts, web3FromAddress;
+
+async function initLibs() {
+  await loadScript('https://unpkg.com/@polkadot/api@10.11.2/bundle-polkadot-api.js');
+  await loadScript('https://unpkg.com/@polkadot/extension-dapp@0.46.5/bundle-polkadot-extension-dapp.js');
+  ApiPromise = window.polkadotApi?.ApiPromise;
+  WsProvider = window.polkadotApi?.WsProvider;
+  web3Enable = window.polkadotExtensionDapp?.web3Enable;
+  web3Accounts = window.polkadotExtensionDapp?.web3Accounts;
+  web3FromAddress = window.polkadotExtensionDapp?.web3FromAddress;
+  if (!ApiPromise || !WsProvider) throw new Error('Biblioteki nie załadowane — sprawdź połączenie z internetem');
+}
 
 let api = null;
 let accounts = [];
@@ -128,8 +143,10 @@ function getRpc() {
 }
 
 async function connectWallet() {
-  showStatus('status-conn', 'Łączenie z siecią...', 'info');
+  showStatus('status-conn', 'Ładowanie bibliotek...', 'info');
   try {
+    await initLibs();
+    showStatus('status-conn', 'Łączenie z siecią...', 'info');
     const provider = new WsProvider(getRpc());
     api = await ApiPromise.create({provider});
     showStatus('status-conn', 'Sieć OK. Łączenie z walletem...', 'info');
