@@ -102,28 +102,18 @@ button:active{transform:scale(.98)}
   <div id="status-multi" class="status"></div>
 </div>
 
-<script>
-async function loadScript(src) {
-  return new Promise((res, rej) => {
-    const s = document.createElement('script');
-    s.src = src;
-    s.onload = res;
-    s.onerror = rej;
-    document.head.appendChild(s);
-  });
-}
-
+<script type="module">
 let ApiPromise, WsProvider, web3Enable, web3Accounts, web3FromAddress;
 
 async function initLibs() {
-  await loadScript('https://unpkg.com/@polkadot/api@10.11.2/bundle-polkadot-api.js');
-  await loadScript('https://unpkg.com/@polkadot/extension-dapp@0.46.5/bundle-polkadot-extension-dapp.js');
-  ApiPromise = window.polkadotApi?.ApiPromise;
-  WsProvider = window.polkadotApi?.WsProvider;
-  web3Enable = window.polkadotExtensionDapp?.web3Enable;
-  web3Accounts = window.polkadotExtensionDapp?.web3Accounts;
-  web3FromAddress = window.polkadotExtensionDapp?.web3FromAddress;
-  if (!ApiPromise || !WsProvider) throw new Error('Biblioteki nie załadowane — sprawdź połączenie z internetem');
+  const api = await import('https://esm.sh/@polkadot/api@10.11.2');
+  const dapp = await import('https://esm.sh/@polkadot/extension-dapp@0.46.5');
+  ApiPromise = api.ApiPromise;
+  WsProvider = api.WsProvider;
+  web3Enable = dapp.web3Enable;
+  web3Accounts = dapp.web3Accounts;
+  web3FromAddress = dapp.web3FromAddress;
+  if (!ApiPromise || !WsProvider) throw new Error('Biblioteki nie załadowane');
 }
 
 let api = null;
@@ -308,6 +298,13 @@ async function doMultiStake() {
   }
   showStatus('status-multi', 'Gotowe: ' + ok + ' OK, ' + fail + ' błędów', ok > 0 ? 'ok' : 'err');
 }
+
+window.connectWallet = connectWallet;
+window.doStake = doStake;
+window.doRemoveStake = doRemoveStake;
+window.doRemoveStakeFull = doRemoveStakeFull;
+window.doMultiStake = doMultiStake;
+window.doMultiRemoveFull = doMultiRemoveFull;
 </script>
 </body>
 </html>
